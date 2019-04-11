@@ -142,6 +142,8 @@ static int store_jpeg(char *filename, struct image_t *image) {
 int main(int argc, char **argv) {
 
 	struct image_t image;
+	int hex, x, y, d;
+	int xsize, ysize, depth;
 
 	/* Check command line usage */
 	if (argc<2) {
@@ -152,39 +154,49 @@ int main(int argc, char **argv) {
 	/* Load an image */
 	load_jpeg(argv[1],&image);
 
+	xsize = image.x;
+	ysize = image.y;
+	depth = image.depth;
+
 	Display *display = XOpenDisplay(NULL);
 	int screen_num = DefaultScreen(display);
 	Window root = RootWindow(display,screen_num);
 	Visual *visual = DefaultVisual(display,screen_num);
+	
+	char *data = (char *)malloc(xsize*ysize*4);
 
-	//char *data = (char*)malloc(256*256*4);
+	XImage *img = XCreateImage(display,visual,DefaultDepth(display,screen_num),ZPixmap,0,data,xsize,ysize,32,0);
 
-	XImage *img = XCreateImage(display,visual,image.depth,XYPixmap,
-		0,image.pixels,256,256,32,0);
-	fprintf(stdout, "Sucessfully create image\n");
-	/*	
-	int count = 256 * 256;
-	for (int i = 0; i < count; ++i)
-	{
-		fprintf(stdout, "%d\n", i);
-		XAddPixel(img,(long)image.pixels[i]);
+	// X11 does 8bpp, 16bpp, and 32bpp. The 32bpp has format NGBR.
+	for(x = 0; x < xsize; x++) {
+		for(y = 0; y < ysize; y++) {
+			hex = 0;
+			// Blue
+			hex |= (image.pixels[(y*xsize*depth)+x*depth]<<16);
+			// Green
+			hex |= (image.pixels[(y*xsize*depth)+x*depth+1]<<8);
+			// Red
+			hex |= (image.pixels[(y*xsize*depth)+x*depth+2]);
+			XPutPixel(img, x, y, (long)hex);
+		}
 	}
-	fprintf(stdout,"end\n");
-	*/
-
-	Window win = XCreateSimpleWindow(display,root,50,50,256,256,1,0,0);
-	XSelectInput(display,win,ExposureMask|KeyPressMask);
+	
+	Window win = XCreateSimpleWindow(display,root,50,50,xsize,ysize,1,0,0);
+	XSelectInput(display,win,ExposureMask);
 	XMapWindow(display,win);
-	XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,256,256);
 
 	XEvent event;
 	while(1)
 	{
 		XNextEvent(display,&event);
+		if(event.type == Expose)
+		{
+			XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,xsize,ysize);
+		}
 	}
 	return 0;
-	/* Write data back out to disk */
-    //store_jpeg("out.jpg",&image);
+
+    store_jpeg("out.jpg",&image);
 
 	return 0;
 }
