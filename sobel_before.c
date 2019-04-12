@@ -26,6 +26,7 @@ struct image_t {
 	unsigned char *pixels;
 };
 
+// Structure for convolve data
 struct convolve_data_t {
 	struct image_t *old;
 	struct image_t *new;
@@ -34,6 +35,7 @@ struct convolve_data_t {
     int yend;
 };
 
+// Struct for X11 Image data
 struct XImage_data_t {
 	XImage *img;
 	Display *dpy;
@@ -42,7 +44,7 @@ struct XImage_data_t {
 };
 
 /* very inefficient convolve code */
-static void *generic_convolve(void *argument) {
+static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 
     int x,y,k,l,d;
     uint32_t color;
@@ -53,6 +55,7 @@ static void *generic_convolve(void *argument) {
     int (*filter)[3][3];
     struct convolve_data_t *data;
     int ystart, yend;
+	int val;
     
     /* Convert from void pointer to the actual data type */
     data=(struct convolve_data_t *)argument;
@@ -69,36 +72,41 @@ static void *generic_convolve(void *argument) {
     if (ystart==0) ystart=1;
     if (yend==old->y) yend=old->y-1;
     
-    for(d=0;d<3;d++) {
-       for(x=1;x<old->x-1;x++) {
-         for(y=ystart;y<yend;y++) {
-        sum=0;
-        for(k=-1;k<2;k++) {
-           for(l=-1;l<2;l++) {
-            color=old->pixels[((y+l)*width)+(x*depth+d+k*depth)];
-            sum+=color * (*filter)[k+1][l+1];
-           }
-        }
-    
-        if (sum<0) sum=0;
-        if (sum>255) sum=255;
-        
-        new->pixels[(y*width)+x*depth+d]=sum;
-         }
-       } 
-    }  
+	for(x=1;x<old->x-1;x++) {
+		for(y=ystart;y<yend;y++) {
+			val=0;
+			for(d=0; d<3; d++) {
+				sum=0;
+				for(k=-1;k<2;k++) {
+					for(l=-1;l<2;l++) {
+					color=old->pixels[((y+l)*width)+(x*depth+d+k*depth)];
+					sum+=color * (*filter)[k+1][l+1];
+					}
+				}
+
+				if (sum<0) sum=0;
+				if (sum>255) sum=255;
+				
+				new->pixels[(y*width)+x*depth+d]=sum;
+				val |= (sum<<8*(2-d));
+			}
+			// Update the pixel at x,y with the new value we have
+			XPutPixel(image->img, x, y, (long)val);
+			XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
+		}
+	} 
     
     return NULL;
 }
 
-
+// Combine routine
 static int combine(struct image_t *s_x,
             struct image_t *s_y,
             struct image_t *new,
 			struct XImage_data_t *image) {
     int out;
 	int val;
-	int x,y;
+	int x,y,d;
 	int xsize = s_x->x;
 	int ysize = s_x->y;
 	int depth = s_x->depth;
@@ -106,30 +114,16 @@ static int combine(struct image_t *s_x,
     for(y=0;y<ysize;y++) {
 		for(x=0; x < xsize; x++){
 			val = 0;
-			// Red 
-			out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth]*s_x->pixels[(y*xsize*depth)+x*depth])
-				+(s_y->pixels[(y*xsize*depth)+x*depth]*s_y->pixels[(y*xsize*depth)+x*depth]));
-			if (out>255) out=255;
-			if (out<0) out=0;
-			new->pixels[(y*xsize*depth)+x*depth]=out;
-			val |= (out<<16);
+			for(d=0; d<3; d++) {
+				out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth+d]*s_x->pixels[(y*xsize*depth)+x*depth+d])
+					+(s_y->pixels[(y*xsize*depth)+x*depth+d]*s_y->pixels[(y*xsize*depth)+x*depth+d]));
+				if (out>255) out=255;
+				if (out<0) out=0;
+				new->pixels[(y*xsize*depth)+x*depth+d]=out;
+				val |= (out<<8*(2-d));
+			}
 
-			// Green
-			out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth+1]*s_x->pixels[(y*xsize*depth)+x*depth+1])
-				+(s_y->pixels[(y*xsize*depth)+x*depth+1]*s_y->pixels[(y*xsize*depth)+x*depth+1]));
-			if (out>255) out=255;
-			if (out<0) out=0;
-			new->pixels[(y*xsize*depth)+x*depth+1]=out;
-			val |= (out<<8);
-
-			// Blue
-			out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth+2]*s_x->pixels[(y*xsize*depth)+x*depth+2])
-				+(s_y->pixels[(y*xsize*depth)+x*depth+2]*s_y->pixels[(y*xsize*depth)+x*depth+2]));
-			if (out>255) out=255;
-			if (out<0) out=0;
-			new->pixels[(y*xsize*depth)+x*depth+2]=out;
-			val |= (out);
-
+			// Update the pixel at x,y with the new value we have
 			XPutPixel(image->img, x, y, (long)val);
 			XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
 		}
@@ -258,10 +252,16 @@ static int store_jpeg(char *filename, struct image_t *image) {
 int main(int argc, char **argv) {
 
 	struct image_t image, sobel_x, sobel_y, new_image;
-	struct convolve_data_t sobel_data[2];
+	struct convolve_data_t sobel_data;
 	struct XImage_data_t x_data;
-	int hex, x, y;
+	int val, x, y, d;
 	int xsize, ysize, depth;
+	char *data;
+	Display *display;
+	int screen_num;
+	Window root, win;
+	Visual *visual;
+	XImage *img;
 
 	/* Check command line usage */
 	if (argc<2) {
@@ -294,57 +294,64 @@ int main(int argc, char **argv) {
 	ysize = image.y;
 	depth = image.depth;
 
-	sobel_data[0].old=&image;
-	sobel_data[0].new=&sobel_x;
-	sobel_data[0].filter=&sobel_x_filter;
-	sobel_data[0].ystart=0;
-	sobel_data[0].yend=image.y;
-	generic_convolve((void *)&sobel_data[0]);
-
-	sobel_data[1].old=&image;
-	sobel_data[1].new=&sobel_y;
-	sobel_data[1].filter=&sobel_y_filter;
-	sobel_data[1].ystart=0;
-	sobel_data[1].yend=image.y;
-	generic_convolve((void *)&sobel_data[1]);
-
-	Display *display = XOpenDisplay(NULL);
-	int screen_num = DefaultScreen(display);
-	Window root = RootWindow(display,screen_num);
-	Visual *visual = DefaultVisual(display,screen_num);
+	// Initial X11 window setup
+	display = XOpenDisplay(NULL);
+	screen_num = DefaultScreen(display);
+	root = RootWindow(display,screen_num);
+	visual = DefaultVisual(display,screen_num);
 	
-	char *data = (char *)malloc(xsize*ysize*4);
+	// Create X11 Image using input image parameters
+	// Although we load images with 24bpp, X11 only has 8, 16, and 32bpp capabilities so we use 32bpp
+	data = (char *)malloc(xsize*ysize*4);
+	img = XCreateImage(display,visual,DefaultDepth(display,screen_num),ZPixmap,0,data,xsize,ysize,32,0);
 
-	XImage *img = XCreateImage(display,visual,DefaultDepth(display,screen_num),ZPixmap,0,data,xsize,ysize,32,0);
-
-	// X11 does 8bpp, 16bpp, and 32bpp. The 32bpp has format NBGR.
-	for(y = 0; y < ysize; y++) {
-		for(x = 0; x < xsize; x++) {
-			hex = 0;
-			// Red 
-			hex |= (image.pixels[(y*xsize*depth)+x*depth]<<16);
-			// Green
-			hex |= (image.pixels[(y*xsize*depth)+x*depth+1]<<8);
-			// Blue
-			hex |= (image.pixels[(y*xsize*depth)+x*depth+2]);
-			XPutPixel(img, x, y, (long)hex);
-		}
-	}
-
-	Window win = XCreateSimpleWindow(display,root,50,50,xsize,ysize,1,0,0);
-	XSelectInput(display,win,ExposureMask);
+	// Setup window for displaying
+	win = XCreateSimpleWindow(display,root,50,50,xsize,ysize,1,0,0);
 	XMapWindow(display,win);
-	XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,xsize,ysize);
 
+	// Setup X11 image data struct
 	x_data.dpy = display;
 	x_data.img = img;
 	x_data.screen = screen_num;
 	x_data.win = win;
 
+	// Display original image to X11 Screen
+	for(y = 0; y < ysize; y++) {
+		for(x = 0; x < xsize; x++) {
+			val = 0;
+			for(d = 0; d<3; d++) {
+				val |= (image.pixels[(y*xsize*depth)+x*depth+d]<<8*(2-d));
+			}
+			XPutPixel(img, x, y, (long)val);
+		}
+	}
+
+	// Set window name so you know what's running
+	XStoreName(display, win, "Sobel X Convolution");
+	sobel_data.old=&image;
+	sobel_data.new=&sobel_x;
+	sobel_data.filter=&sobel_x_filter;
+	sobel_data.ystart=0;
+	sobel_data.yend=image.y;
+	generic_convolve((void *)&sobel_data, &x_data);
+
+	// Set window name so you know what's running
+	XStoreName(display, win, "Sobel Y Convolution");
+	sobel_data.old=&image;
+	sobel_data.new=&sobel_y;
+	sobel_data.filter=&sobel_y_filter;
+	sobel_data.ystart=0;
+	sobel_data.yend=image.y;
+	generic_convolve((void *)&sobel_data, &x_data);
+
+	// Set window name so you know what's running
+	XStoreName(display, win, "Combine");
 	combine(&sobel_x, &sobel_y, &new_image, &x_data);
 
+	// Destroy image now that we're done
 	XDestroyImage(img);
 
+	// Store image
     store_jpeg("out.jpg",&new_image);
 
 	return 0;
