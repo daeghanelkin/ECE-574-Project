@@ -6,4 +6,4 @@ all:
 	$(CC) -o sobel_before $(CFLAGS) sobel_before.c $(LIBS)
 
 clean:
-	rm -f sobel_before
+	rm -f sobel_before out.jpg

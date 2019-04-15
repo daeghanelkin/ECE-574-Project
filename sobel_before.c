@@ -92,8 +92,8 @@ static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 			}
 			// Update the pixel at x,y with the new value we have
 			XPutPixel(image->img, x, y, (long)val);
-			XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
 		}
+        XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
 	} 
     
     return NULL;
@@ -125,8 +125,8 @@ static int combine(struct image_t *s_x,
 
 			// Update the pixel at x,y with the new value we have
 			XPutPixel(image->img, x, y, (long)val);
-			XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
 		}
+        XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
     }
 
     return 0;
