@@ -12,6 +12,9 @@
 
 #include <mpi.h>
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
 /* Filters */
 static int sobel_x_filter[3][3]={{-1,0,+1},{-2,0,+2},{-1,0,+1}};
 static int sobel_y_filter[3][3]={{-1,-2,-1},{0,0,0},{1,2,+1}};
@@ -32,9 +35,16 @@ struct convolve_data_t {
 	int yend;
 };
 
+// Struct for X11 Image data
+struct XImage_data_t {
+        XImage *img;
+        Display *dpy;
+        int screen;
+        Window win;
+};
 
 /* very inefficient convolve code */
-static void *generic_convolve(void *argument) {
+static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 
 	int x,y,k,l,d;
 	uint32_t color;
@@ -45,7 +55,7 @@ static void *generic_convolve(void *argument) {
 	int (*filter)[3][3];
 	struct convolve_data_t *data;
 	int ystart, yend;
-
+	long val;
 	/* Convert from void pointer to the actual data type */
 	data=(struct convolve_data_t *)argument;
 	old=data->old;
@@ -76,8 +86,12 @@ static void *generic_convolve(void *argument) {
 				if (sum>255) sum=255;
 				//added offset to put at begining of the buffer
 				new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
+				val |= (sum<<8*(2-d));
 	    }
+                        // Update the pixel at x,y with the new value we have
+                        XPutPixel(image->img, x, y, (long)val);
 	  }
+	XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
 	}
 	return NULL;
 }
@@ -202,19 +216,31 @@ static int store_jpeg(char *filename, struct image_t *image) {
 
 static int combine(struct image_t *s_x,
 			struct image_t *s_y,
-			struct image_t *new) {
-	int i;
+			struct image_t *new,
+			struct XImage_data_t *image) {
 	int out;
+        int val;
+        int x,y,d;
+        int xsize = s_x->x;
+        int ysize = s_x->y;
+        int depth = s_x->depth;
 
-	for(i=0;i<( s_x->depth * s_x->x * s_x->y );i++) {
+    for(y=0;y<ysize;y++) {
+                for(x=0; x < xsize; x++){
+                        val = 0;
+                        for(d=0; d<3; d++) {
+                                out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth+d]*s_x->pixels[(y*xsize*depth)+x*depth+d])
+                                        +(s_y->pixels[(y*xsize*depth)+x*depth+d]*s_y->pixels[(y*xsize*depth)+x*depth+d]));
+                                if (out>255) out=255;
+                                if (out<0) out=0;
+                                new->pixels[(y*xsize*depth)+x*depth+d]=out;
+                                val |= (out<<8*(2-d));
+                        }
 
-		out=sqrt(
-			(s_x->pixels[i]*s_x->pixels[i])+
-			(s_y->pixels[i]*s_y->pixels[i])
-			);
-		if (out>255) out=255;
-		if (out<0) out=0;
-		new->pixels[i]=out;
+                        // Update the pixel at x,y with the new value we have
+                        XPutPixel(image->img, x, y, (long)val);
+                }
+        XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
 	}
 
 	return 0;
@@ -224,9 +250,18 @@ int main(int argc, char **argv) {
 
 	struct image_t image,sobel_x,sobel_y,new_image,another;
 	struct convolve_data_t sobel_data[2];
+	struct XImage_data_t x_data;
 	double start_time=0,load_time=0,store_time,convolve_time,combine_time;
-	int result, myid, numprocs;
+	int result, myid, numprocs,y,x,d;
 	int buff[3];		//x,y,depth
+	long val = 0;
+	char *data;
+        Display *display;
+        int screen_num;
+        Window root, win;
+        Visual *visual;
+        XImage *img;
+
 	/* Check command line usage */
 	if (argc<2) {
 		fprintf(stderr,"Usage: %s image_file\n",argv[0]);
@@ -254,9 +289,41 @@ int main(int argc, char **argv) {
 		load_time=MPI_Wtime();				
 		printf("Load time: %lf\n",load_time-start_time);
 
-	  buff[0] = image.x;			//horizontal pixel #
-	  buff[1] = image.y;			//vertical pixel #
-	  buff[2] = image.depth;	//image depth
+		buff[0] = image.x;			//horizontal pixel #
+		buff[1] = image.y;			//vertical pixel #
+		buff[2] = image.depth;	//image depth
+
+		// Initial X11 window setup
+		display = XOpenDisplay(NULL);
+		screen_num = DefaultScreen(display);
+		root = RootWindow(display,screen_num);
+		visual = DefaultVisual(display,screen_num);
+
+		// Create X11 Image using input image parameters
+		// Although we load images with 24bpp, X11 only has 8, 16, and 32bpp capabilities so we use 32bpp
+		data = (char *)malloc(image.x*image.y*4);
+		img = XCreateImage(display,visual,DefaultDepth(display,screen_num),ZPixmap,0,data,image.x,image.y,32,0);
+
+		// Setup window for displaying
+		win = XCreateSimpleWindow(display,root,50,50,image.x,image.y,1,0,0);
+		XMapWindow(display,win);
+
+		// Setup X11 image data struct
+		x_data.dpy = display;
+		x_data.img = img;
+		x_data.screen = screen_num;
+		x_data.win = win;
+
+		// Display original image to X11 Screen
+		for(y = 0; y < image.y; y++) {
+			for(x = 0; x < image.x; x++) {
+				val = 0;
+				for(d = 0; d<3; d++) {
+					val |= (image.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+				}
+				XPutPixel(img, x, y, (long)val);
+			}
+		}
 
 	}
 
@@ -299,26 +366,26 @@ int main(int argc, char **argv) {
 	sobel_y.depth = buff[2];
 
 	//setup data for sobel_x convolution
-  sobel_data[0].old=&image;
-  sobel_data[0].new=&another;
+	sobel_data[0].old=&image;
+	sobel_data[0].new=&another;
  	sobel_data[0].filter=&sobel_x_filter;
  	sobel_data[0].ystart = (image.y/numprocs) *myid;
  	sobel_data[0].yend = image.y/numprocs*(myid+1);
 	//if last process go to end of the y
 	if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[0].yend = image.y;
 	//sobel_x convolution
- 	generic_convolve((void *)&sobel_data[0]);
+ 	generic_convolve((void *)&sobel_data[0],&x_data);
 
 	//setup data for sobel_x convolution
-  sobel_data[1].old=&image;
-  sobel_data[1].new=&new_image;
+	sobel_data[1].old=&image;
+	sobel_data[1].new=&new_image;
  	sobel_data[1].filter=&sobel_y_filter;
  	sobel_data[1].ystart = (image.y/numprocs) * myid;
  	sobel_data[1].yend = image.y/numprocs*(myid+1);
 	//if last process go to end of the y
 	if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[1].yend = image.y;
 	//sobel)y convolution
- 	generic_convolve((void *)&sobel_data[1]);
+ 	generic_convolve((void *)&sobel_data[1],&x_data);
 
 	convolve_time=MPI_Wtime();
 
@@ -343,7 +410,7 @@ int main(int argc, char **argv) {
 	if(myid == 0) {
 
 		/* Combine to form output */
-		combine(&sobel_x,&sobel_y,&new_image);
+		combine(&sobel_x,&sobel_y,&new_image,&x_data);
 		combine_time=MPI_Wtime();
 
 		store_jpeg("out.jpg",&new_image);
