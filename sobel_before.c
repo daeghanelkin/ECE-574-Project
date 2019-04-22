@@ -325,7 +325,6 @@ int main(int argc, char **argv) {
 			XPutPixel(img, x, y, (long)val);
 		}
 	}
-
 	// Set window name so you know what's running
 	XStoreName(display, win, "Sobel X Convolution");
 	sobel_data.old=&image;
@@ -347,7 +346,6 @@ int main(int argc, char **argv) {
 	// Set window name so you know what's running
 	XStoreName(display, win, "Combine");
 	combine(&sobel_x, &sobel_y, &new_image, &x_data);
-
 	// Destroy image now that we're done
 	XDestroyImage(img);
 

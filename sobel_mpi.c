@@ -55,7 +55,7 @@ static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 	int (*filter)[3][3];
 	struct convolve_data_t *data;
 	int ystart, yend;
-	long val;
+	//long val = 0;
 	/* Convert from void pointer to the actual data type */
 	data=(struct convolve_data_t *)argument;
 	old=data->old;
@@ -86,12 +86,12 @@ static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 				if (sum>255) sum=255;
 				//added offset to put at begining of the buffer
 				new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
-				val |= (sum<<8*(2-d));
+	//			val |= (sum<<8*(2-d));
 	    }
                         // Update the pixel at x,y with the new value we have
-                        XPutPixel(image->img, x, y, (long)val);
+          //              XPutPixel(image->img, x, y, (long)val);
 	  }
-	XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
+//	XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,old->x,old->y);
 	}
 	return NULL;
 }
@@ -219,7 +219,7 @@ static int combine(struct image_t *s_x,
 			struct image_t *new,
 			struct XImage_data_t *image) {
 	int out;
-        int val;
+       // int val;
         int x,y,d;
         int xsize = s_x->x;
         int ysize = s_x->y;
@@ -227,20 +227,20 @@ static int combine(struct image_t *s_x,
 
     for(y=0;y<ysize;y++) {
                 for(x=0; x < xsize; x++){
-                        val = 0;
+                        //val = 0;
                         for(d=0; d<3; d++) {
                                 out=sqrt((s_x->pixels[(y*xsize*depth)+x*depth+d]*s_x->pixels[(y*xsize*depth)+x*depth+d])
                                         +(s_y->pixels[(y*xsize*depth)+x*depth+d]*s_y->pixels[(y*xsize*depth)+x*depth+d]));
                                 if (out>255) out=255;
                                 if (out<0) out=0;
                                 new->pixels[(y*xsize*depth)+x*depth+d]=out;
-                                val |= (out<<8*(2-d));
+//                                val |= (out<<8*(2-d));
                         }
 
                         // Update the pixel at x,y with the new value we have
-                        XPutPixel(image->img, x, y, (long)val);
+//                        XPutPixel(image->img, x, y, (long)val);
                 }
-        XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
+//        XPutImage(image->dpy,image->win,DefaultGC(image->dpy,image->screen),image->img,0,0,0,0,s_x->x,s_x->y);
 	}
 
 	return 0;
@@ -254,6 +254,7 @@ int main(int argc, char **argv) {
 	double start_time=0,load_time=0,store_time,convolve_time,combine_time;
 	int result, myid, numprocs,y,x,d;
 	int buff[3];		//x,y,depth
+	int i;
 	long val = 0;
 	char *data;
         Display *display;
@@ -324,7 +325,7 @@ int main(int argc, char **argv) {
 				XPutPixel(img, x, y, (long)val);
 			}
 		}
-
+		XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
@@ -369,14 +370,58 @@ int main(int argc, char **argv) {
 	sobel_data[0].old=&image;
 	sobel_data[0].new=&another;
  	sobel_data[0].filter=&sobel_x_filter;
- 	sobel_data[0].ystart = (image.y/numprocs) *myid;
- 	sobel_data[0].yend = image.y/numprocs*(myid+1);
-	//if last process go to end of the y
-	if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[0].yend = image.y;
-	//sobel_x convolution
- 	generic_convolve((void *)&sobel_data[0],&x_data);
+	int total = buff[1] / numprocs;
+	int start = myid;
+	int j = 0, k = 0;
+	int line = buff[0] * buff[2];
+	int xa = 0, ya = 0;
+	for(i = 0; i < total; i++) {
+		if(i == start) {
+ 			sobel_data[0].ystart = start;
+ 			sobel_data[0].yend = start + 1;
+			start += numprocs;
+			//sobel_x convolution
+ 			generic_convolve((void *)&sobel_data[0],&x_data);
+	        	//gather all of the sobel_x processes and stoare into sobel_x
+			MPI_Gather(another.pixels,              //source
+				sobel_x.depth*sobel_x.x*(sobel_x.y/(numprocs)),    //count
+				MPI_CHAR,  //type
+				sobel_x.pixels,  //recieve buffer
+				sobel_x.depth * sobel_x.x*(sobel_x.y/(numprocs)),    //count
+				MPI_CHAR,    //type
+				0,   //source
+				MPI_COMM_WORLD);
+			MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+		}
+		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+//		printf("It is: %d on thread %d\n", i, myid);
+		if(myid == 0) {
+			int total_size = image.y*numprocs;
+			int start_print = total_size * (start-numprocs);
+			for(k = 0; k < numprocs; k++) {
+				ya = 0;
+				for(j=start_print; j < start_print + total_size;  j++) {
+				//for(j=(start*line); j < ((start*line)+(numprocs*image.y)); j) {
+//					new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
+					val = 0;
+					val |= sobel_x.pixels[j++] <<8*(2);
+					val |= sobel_x.pixels[j++] <<8*(1);
+					val |= sobel_x.pixels[j++] <<8*(0);
+					//val |= (sobel_x.pixels[j]<<8*(2-(j%3)));
+					//XPutPixel(img, (start+myid)/buff[2], start + myid, (long)val);	
+					XPutPixel(img, xa, ya++, (long)val);	
+				}
+				XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
+				xa++;
+			}
+		}
+		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+	}
 
+	//if last process go to end of the y
+	//if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[0].yend = image.y;
 	//setup data for sobel_x convolution
+/*
 	sobel_data[1].old=&image;
 	sobel_data[1].new=&new_image;
  	sobel_data[1].filter=&sobel_y_filter;
@@ -407,13 +452,14 @@ int main(int argc, char **argv) {
            MPI_CHAR,    //type
            0,   //source
            MPI_COMM_WORLD);
+*/
 	if(myid == 0) {
 
 		/* Combine to form output */
-		combine(&sobel_x,&sobel_y,&new_image,&x_data);
-		combine_time=MPI_Wtime();
+//		combine(&sobel_x,&sobel_y,&new_image,&x_data);
+//		combine_time=MPI_Wtime();
 
-		store_jpeg("out.jpg",&new_image);
+//		store_jpeg("out.jpg",&new_image);
 		store_time=MPI_Wtime();
 
  		printf("Convolve time: %lf\n",convolve_time-load_time);
