@@ -70,6 +70,7 @@ static void *generic_convolve(void *argument, struct XImage_data_t *image) {
 
 	if (ystart==0) ystart=1;
 	if (yend==old->y) yend=old->y-1;
+	if (yend==ystart) yend++;
 
 	for(d=0;d<3;d++) {
 	   for(x=1;x<old->x-1;x++) {
@@ -371,53 +372,49 @@ int main(int argc, char **argv) {
 	sobel_data[0].new=&another;
  	sobel_data[0].filter=&sobel_x_filter;
 	int total = buff[1] / numprocs;
-	int start = myid;
-	int j = 0, k = 0;
-	int line = buff[0] * buff[2];
+	int j = 0, k = 0, h = 0,v;
 	int xa = 0, ya = 0;
-	for(i = 0; i < total; i++) {
-		if(i == start) {
- 			sobel_data[0].ystart = start;
- 			sobel_data[0].yend = start + 1;
-			start += numprocs;
-			//sobel_x convolution
- 			generic_convolve((void *)&sobel_data[0],&x_data);
-	        	//gather all of the sobel_x processes and stoare into sobel_x
-			MPI_Gather(another.pixels,              //source
-				sobel_x.depth*sobel_x.x*(sobel_x.y/(numprocs)),    //count
-				MPI_CHAR,  //type
-				sobel_x.pixels,  //recieve buffer
-				sobel_x.depth * sobel_x.x*(sobel_x.y/(numprocs)),    //count
-				MPI_CHAR,    //type
-				0,   //source
-				MPI_COMM_WORLD);
-			MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+	printf("Thread %d Entered\n", myid);
+	for(v = 0; v < total; v++) {
+		for(i = 0; i < numprocs; i++) {
+			if(i == myid) {
+				another.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
+				sobel_data[0].ystart = myid + (myid+1)*v;
+				sobel_data[0].yend = sobel_data[0].ystart + 1;;
+				printf("Thread %d Start %d End %d\n", myid, sobel_data[0].ystart, sobel_data[0].yend);
+				generic_convolve((void *)&sobel_data[0],&x_data);
+
+				MPI_Gather(another.pixels,              //source
+					sobel_x.depth*sobel_x.x*(sobel_x.y/(numprocs)),    //count
+					MPI_CHAR,  //type
+					sobel_x.pixels,  //recieve buffer
+					sobel_x.depth * sobel_x.x*(sobel_x.y/(numprocs)),    //count
+					MPI_CHAR,    //type
+					0,   //source
+					MPI_COMM_WORLD);
+			}
 		}
+		printf("Gathered %d\n", myid);
+		printf("It is: %d on thread %d\n", i, myid);
 		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
-//		printf("It is: %d on thread %d\n", i, myid);
 		if(myid == 0) {
-			int total_size = image.y*numprocs;
-			int start_print = total_size * (start-numprocs);
-			for(k = 0; k < numprocs; k++) {
-				ya = 0;
-				for(j=start_print; j < start_print + total_size;  j++) {
+			for(k = (sobel_data[0].ystart-numprocs); k < sobel_data[0].ystart; k++) {
+				xa = 0;
+				for(j=0; j < (image.depth+1)*image.x;  j) {
 				//for(j=(start*line); j < ((start*line)+(numprocs*image.y)); j) {
 //					new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
 					val = 0;
-					val |= sobel_x.pixels[j++] <<8*(2);
-					val |= sobel_x.pixels[j++] <<8*(1);
-					val |= sobel_x.pixels[j++] <<8*(0);
-					//val |= (sobel_x.pixels[j]<<8*(2-(j%3)));
-					//XPutPixel(img, (start+myid)/buff[2], start + myid, (long)val);	
-					XPutPixel(img, xa, ya++, (long)val);	
+					for(h = 0; h <image.depth; h++) {
+						val |= sobel_x.pixels[j++] <<8*(2-h);
+					}
+					XPutPixel(img, xa++, ya, (long)val);	
 				}
 				XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
-				xa++;
+				ya++;
 			}
 		}
 		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
 	}
-
 	//if last process go to end of the y
 	//if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[0].yend = image.y;
 	//setup data for sobel_x convolution
