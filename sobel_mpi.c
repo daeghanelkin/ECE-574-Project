@@ -249,7 +249,7 @@ static int combine(struct image_t *s_x,
 
 int main(int argc, char **argv) {
 
-	struct image_t image,sobel_x,sobel_y,new_image,another;
+	struct image_t image,sobel_x,sobel_y,new_image,another,sobel_xa;
 	struct convolve_data_t sobel_data[2];
 	struct XImage_data_t x_data;
 	double start_time=0,load_time=0,store_time,convolve_time,combine_time;
@@ -345,6 +345,7 @@ int main(int argc, char **argv) {
 	}
 	//allocate memory for sobels and new 
 	sobel_x.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
+	sobel_xa.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
 	sobel_y.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
 	another.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
 
@@ -376,18 +377,21 @@ int main(int argc, char **argv) {
 	sobel_data[0].old=&image;
 	sobel_data[0].new=&another;
  	sobel_data[0].filter=&sobel_x_filter;
+	sobel_data[0].ystart = myid - numprocs;
 	int total = buff[1] / numprocs;
 	int j = 0, k = 0, h = 0,v;
 	int xa = 0, ya = 0;
-	printf("Thread %d Entered\n", myid);
+//	printf("Thread %d Entered\n", myid);
 	for(v = 0; v < total; v++) {
 		for(i = 0; i < numprocs; i++) {
 			if(i == myid) {
 				another.pixels=calloc(buff[0]*buff[1]*buff[2],sizeof(char));
-				sobel_data[0].ystart = myid + (myid+1)*v;
-				sobel_data[0].yend = sobel_data[0].ystart + 1;;
-				printf("Thread %d Start %d End %d\n", myid, sobel_data[0].ystart, sobel_data[0].yend);
+				sobel_data[0].new=&another;
+				sobel_data[0].ystart += numprocs;
+				sobel_data[0].yend = sobel_data[0].ystart + 1;
+		//		printf("Thread %d Start %d End %d\n", myid, sobel_data[0].ystart, sobel_data[0].yend);
 				generic_convolve((void *)&sobel_data[0],&x_data);
+				MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
 
 				MPI_Gather(another.pixels,              //source
 					sobel_x.depth*sobel_x.x*(sobel_x.y/(numprocs)),    //count
@@ -399,21 +403,25 @@ int main(int argc, char **argv) {
 					MPI_COMM_WORLD);
 			}
 		}
-		printf("Gathered %d\n", myid);
-		printf("It is: %d on thread %d\n", i, myid);
+		//printf("It is: %d on thread %d\n", i, myid);
 		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
 		if(myid == 0) {
 			// Display original image to X11 Screen
-			for(y = 0; y < ysize; y++) {
-				for(x = 0; x < xsize; x++) {
+			for(x = 0; x < xsize; x++) {
+				for(y = sobel_data[0].ystart; y < (sobel_data[0].ystart + numprocs); y++) {
 					val = 0;
 					for(d = 0; d<3; d++) {
 						val |= (sobel_x.pixels[(y*xsize*depth)+x*depth+d]<<8*(2-d));
+						sobel_xa.pixels[(y*xsize*depth)+x*depth+d] = sobel_x.pixels[(y*xsize*depth)+x*depth+d];
 					}
 					XPutPixel(img, x, y, (long)val);
 				}
 			}
 			XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
+			printf("Y start %d, Y end %d\n",sobel_data[0].ystart, sobel_data[0].ystart + numprocs);
+		}
+		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+	}
 /*
 			for(k = (sobel_data[0].ystart); k < (sobel_data[0].ystart + numprocs); k++) {
 				xa = 0;
@@ -429,8 +437,11 @@ int main(int argc, char **argv) {
 				ya++;
 			}
 */
+	if(myid == 0) {
+		for(i; i<image.x*image.y*image.depth; i++) {
+			sobel_x.pixels[i] = sobel_xa.pixels[i];
 		}
-		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
+		store_jpeg("sobel_x.jpg",&sobel_x);
 	}
 	//if last process go to end of the y
 	//if ((image.y % numprocs) && (myid == (numprocs - 1))) sobel_data[0].yend = image.y;
