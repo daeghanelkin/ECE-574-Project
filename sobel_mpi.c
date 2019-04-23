@@ -256,6 +256,7 @@ int main(int argc, char **argv) {
 	int result, myid, numprocs,y,x,d;
 	int buff[3];		//x,y,depth
 	int i;
+	int xsize, ysize, depth;
 	long val = 0;
 	char *data;
         Display *display;
@@ -294,6 +295,10 @@ int main(int argc, char **argv) {
 		buff[0] = image.x;			//horizontal pixel #
 		buff[1] = image.y;			//vertical pixel #
 		buff[2] = image.depth;	//image depth
+
+		xsize = image.x;
+		ysize = image.y;
+		depth = image.depth;
 
 		// Initial X11 window setup
 		display = XOpenDisplay(NULL);
@@ -398,10 +403,21 @@ int main(int argc, char **argv) {
 		printf("It is: %d on thread %d\n", i, myid);
 		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
 		if(myid == 0) {
-			for(k = (sobel_data[0].ystart-numprocs); k < sobel_data[0].ystart; k++) {
+			// Display original image to X11 Screen
+			for(y = 0; y < ysize; y++) {
+				for(x = 0; x < xsize; x++) {
+					val = 0;
+					for(d = 0; d<3; d++) {
+						val |= (sobel_x.pixels[(y*xsize*depth)+x*depth+d]<<8*(2-d));
+					}
+					XPutPixel(img, x, y, (long)val);
+				}
+			}
+			XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
+/*
+			for(k = (sobel_data[0].ystart); k < (sobel_data[0].ystart + numprocs); k++) {
 				xa = 0;
-				for(j=0; j < (image.depth+1)*image.x;  j) {
-				//for(j=(start*line); j < ((start*line)+(numprocs*image.y)); j) {
+				for(j=(k*image.x*image.depth)+xa*image.depth; j < ((k+1)*image.x*image.depth)+xa*image.depth; j) {
 //					new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
 					val = 0;
 					for(h = 0; h <image.depth; h++) {
@@ -412,6 +428,7 @@ int main(int argc, char **argv) {
 				XPutImage(x_data.dpy,x_data.win,DefaultGC(x_data.dpy,x_data.screen),x_data.img,0,0,0,0,image.x,image.y);
 				ya++;
 			}
+*/
 		}
 		MPI_Barrier(MPI_COMM_WORLD);		//make all pcoesses wait
 	}
