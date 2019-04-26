@@ -72,8 +72,8 @@ static void *generic_convolve(void *argument, struct XImage_data_t *image) {
     if (ystart==0) ystart=1;
     if (yend==old->y) yend=old->y-1;
     
-	for(x=1;x<old->x-1;x++) {
-		for(y=ystart;y<yend;y++) {
+    for(y=ystart;y<yend;y++) {
+        for(x=1;x<old->x-1;x++) {
 			val=0;
 			for(d=0; d<3; d++) {
 				sum=0;
