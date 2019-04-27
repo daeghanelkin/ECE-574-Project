@@ -211,7 +211,7 @@ static int store_jpeg(char *filename, struct image_t *image) {
 
 	return 0;
 }
-
+/*
 static int combine(struct image_t *s_x, struct image_t *s_y, struct image_t *new, struct XImage_data_t *image) {
 	int out;
     int val;
@@ -240,10 +240,33 @@ static int combine(struct image_t *s_x, struct image_t *s_y, struct image_t *new
 
 	return 0;
 }
+*/
+
+static int combine(struct image_t *s_x,
+      struct image_t *s_y,
+      struct image_t *new,
+      int start, int stop
+      ) {
+  int i;
+  int out;
+  for(i = (start* s_x->depth * s_x->x); i < (s_x->depth * s_x->x * stop); i++) {
+
+    out=sqrt(
+      (s_x->pixels[i]*s_x->pixels[i])+
+      (s_y->pixels[i]*s_y->pixels[i])
+      );
+    if (out>255) out=255;
+    if (out<0) out=0;
+    //offset for mpi gather
+    new->pixels[i-(start*s_x->depth*s_x->x)]=out;
+  }
+
+  return 0;
+}
 
 int main(int argc, char **argv) {
 
-	struct image_t image, sobel_x, sobel_y, new_image, tail;
+	struct image_t image, sobel_x, sobel_y, new_image, tail, another;
 	struct convolve_data_t sobel_data;
     struct XImage_data_t x_data;
 	double start_time=0, load_time=0, store_time=0, convolve_time=0, combine_time=0;
@@ -369,6 +392,12 @@ int main(int argc, char **argv) {
 	sobel_y.depth = image.depth;
 	sobel_y.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
 
+	//allocate space for intermediate image
+	another.x=image.x;
+	another.y=image.y;
+	another.depth=image.depth;
+	another.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
+
     // Allocate space for tail image
     if (rank == 0) {
         tail.x = image.x;
@@ -458,6 +487,9 @@ int main(int argc, char **argv) {
         memcpy(&sobel_x.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
+	if(rank == 0) {
+		store_jpeg("x.jpg",&new_image);	
+	}
     // Setup data for sobel_y convolution
     sobel_data.old = &image;
     sobel_data.new = &new_image;
@@ -532,6 +564,113 @@ int main(int argc, char **argv) {
         memcpy(&sobel_y.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
+    if(rank == 0) {
+        store_jpeg("y.jpg",&new_image);
+    }
+	
+    // Make all pcoesses wait
+	MPI_Barrier(MPI_COMM_WORLD);		
+	printf("Bcast\n");
+	//broadcast the input pixels for sobel y & x convoluctions
+	MPI_Bcast(sobel_x.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
+	MPI_Bcast(sobel_y.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
+
+
+
+
+
+
+
+    if (rank == 0) {
+        XStoreName(display, win, "Combine");
+    }
+
+   	int start = image.y / numtasks * rank;
+   	int end = image.y / numtasks * rank + 1;
+
+	if(rank == 0) {
+		printf("Combining\n");
+	}
+    // Loop through the amount of even lines available
+    for(i = 0; i < image.y / numtasks; i++) {
+		combine(&sobel_x,&sobel_y,&another,start,end);
+
+        // Adjust displacements for putting lines into sobel buffer
+        if (rank == 0) {
+            for(j = 0; j < numtasks; j++){
+                displacements[j]=(j*image.y/numtasks*image.x*image.depth)+(i*image.x*image.depth);
+            }
+        }
+
+        // Gather a line at a time from each rank
+        MPI_Gatherv(another.pixels,
+                   image.x*image.depth,
+                   MPI_CHAR,
+                   new_image.pixels,
+                   counts,
+                   displacements,
+                   MPI_CHAR,
+                   0,
+                   MPI_COMM_WORLD);
+
+
+        // Update image
+        if (rank == 0) {
+            for(y = start; y < image.y; y+=image.y/numtasks) {
+                for(x = 0; x < image.x; x++) {
+                    val = 0;
+                    for(d = 0; d<3; d++) {
+                        val |= (new_image.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                    }
+                    XPutPixel(img, x, y, (long)val);
+                }
+
+                // Display image
+                XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,image.x,image.y);
+            }
+        }
+
+        // Increase the start and stop y values for each rank
+        if (end < image.y/numtasks*(rank+1)) {
+            start++;
+            end++;
+        }
+    }
+
+
+    // Calculate tail end of image
+    if (rank == 0 && image.y%numtasks) {
+        sobel_data.old = &image;
+        sobel_data.new = &tail;
+        sobel_data.filter = &sobel_y_filter;
+        sobel_data.ystart = (image.y/numtasks)*numtasks;
+        sobel_data.yend = image.y;
+
+        generic_convolve((void *)&sobel_data);
+
+		combine(&sobel_x,&sobel_y,&tail,(image.y/numtasks)*numtasks,image.y);
+
+        tailstart = (image.y/numtasks)*numtasks;
+        tailsize = image.y-(image.y/numtasks)*numtasks;
+        tailsize *= image.x*image.depth;
+
+        memcpy(&new_image.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+	if(rank == 0) {
+		printf("Finished\n");
+	}
 	if(rank == 0) {
         convolve_time = MPI_Wtime();
 
@@ -541,7 +680,7 @@ int main(int argc, char **argv) {
         x_data.win = win;
 
 		/* Combine to form output */
-		combine(&sobel_x, &sobel_y, &new_image, &x_data);
+//		combine(&sobel_x, &sobel_y, &new_image, &x_data);
 		combine_time = MPI_Wtime();
 
 		store_jpeg("out.jpg",&new_image);
