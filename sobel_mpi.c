@@ -487,10 +487,6 @@ int main(int argc, char **argv) {
         memcpy(&sobel_x.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
-	MPI_Barrier(MPI_COMM_WORLD);		
-	if(rank == 0) {
-		store_jpeg("x.jpg",&new_image);	
-	}
     // Setup data for sobel_y convolution
     sobel_data.old = &image;
     sobel_data.new = &new_image;
@@ -565,10 +561,6 @@ int main(int argc, char **argv) {
         memcpy(&sobel_y.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
-	MPI_Barrier(MPI_COMM_WORLD);		
-    if(rank == 0) {
-        store_jpeg("y.jpg",&new_image);
-    }
 	
     // Make all pcoesses wait
 	MPI_Barrier(MPI_COMM_WORLD);		
@@ -685,6 +677,8 @@ int main(int argc, char **argv) {
 //		combine(&sobel_x, &sobel_y, &new_image, &x_data);
 		combine_time = MPI_Wtime();
 
+        store_jpeg("y.jpg",&sobel_y);
+		store_jpeg("x.jpg",&sobel_x);	
 		store_jpeg("out.jpg",&new_image);
 		store_time=MPI_Wtime();
 
