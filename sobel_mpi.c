@@ -487,6 +487,7 @@ int main(int argc, char **argv) {
         memcpy(&sobel_x.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
+	MPI_Barrier(MPI_COMM_WORLD);		
 	if(rank == 0) {
 		store_jpeg("x.jpg",&new_image);	
 	}
@@ -564,6 +565,7 @@ int main(int argc, char **argv) {
         memcpy(&sobel_y.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
 
+	MPI_Barrier(MPI_COMM_WORLD);		
     if(rank == 0) {
         store_jpeg("y.jpg",&new_image);
     }
