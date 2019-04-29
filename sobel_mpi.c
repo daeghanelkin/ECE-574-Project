@@ -77,17 +77,17 @@ static void *generic_convolve(void *argument) {
         for(y=ystart;y<yend;y++) {
             for(d=0;d<3;d++) {
                 sum=0;
-				for(k=-1;k<2;k++) {
-                    for(l=-1;l<2;l++) {
-                        color=old->pixels[((y+l)*width)+(x*depth+d+k*depth)];
-						sum+=color*(*filter)[k+1][l+1];
+		for(k=-1;k<2;k++) {
+                	for(l=-1;l<2;l++) {
+                        	color=old->pixels[((y+l)*width)+(x*depth+d+k*depth)];
+				sum+=color*(*filter)[k+1][l+1];
                     }
-				}
+		}
 
-				if (sum<0) sum=0;
-				if (sum>255) sum=255;
+			if (sum<0) sum=0;
+			if (sum>255) sum=255;
 
-				new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
+			new->pixels[((y-data->ystart)*width)+x*depth+d]=sum;
             }
         }
 	}
@@ -471,6 +471,7 @@ int main(int argc, char **argv) {
     }
 
     // Calculate tail end of image
+/*
     if (rank == 0 && image.y%numtasks) {
         sobel_data.old = &image;
         sobel_data.new = &tail;
@@ -486,13 +487,15 @@ int main(int argc, char **argv) {
 
         memcpy(&sobel_x.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
-
+*/
     // Setup data for sobel_y convolution
     sobel_data.old = &image;
     sobel_data.new = &new_image;
     sobel_data.filter = &sobel_y_filter;
     sobel_data.ystart = image.y / numtasks * rank;
     sobel_data.yend = image.y / numtasks * rank + 1;
+
+	printf("R%d, start:%d, end:%d\n", rank, sobel_data.ystart, sobel_data.yend);
 
     if (rank == 0) {
         XStoreName(display, win, "Sobel Y Filter");
@@ -545,6 +548,7 @@ int main(int argc, char **argv) {
     }
 
     // Calculate tail end of image
+/*
     if (rank == 0 && image.y%numtasks) {
         sobel_data.old = &image;
         sobel_data.new = &tail;
@@ -560,7 +564,7 @@ int main(int argc, char **argv) {
 
         memcpy(&sobel_y.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
-
+*/
 	
     // Make all pcoesses wait
 	MPI_Barrier(MPI_COMM_WORLD);		
@@ -633,6 +637,7 @@ int main(int argc, char **argv) {
 
 
     // Calculate tail end of image
+/*
     if (rank == 0 && image.y%numtasks) {
         sobel_data.old = &image;
         sobel_data.new = &tail;
@@ -640,9 +645,9 @@ int main(int argc, char **argv) {
         sobel_data.ystart = (image.y/numtasks)*numtasks;
         sobel_data.yend = image.y;
 
-        generic_convolve((void *)&sobel_data);
+        //generic_convolve((void *)&sobel_data);
 
-		combine(&sobel_x,&sobel_y,&tail,(image.y/numtasks)*numtasks,image.y);
+	combine(&sobel_x,&sobel_y,&tail,(image.y/numtasks)*numtasks,image.y);
 
         tailstart = (image.y/numtasks)*numtasks;
         tailsize = image.y-(image.y/numtasks)*numtasks;
@@ -650,7 +655,7 @@ int main(int argc, char **argv) {
 
         memcpy(&new_image.pixels[tailstart*image.x*image.depth], &tail.pixels[0], tailsize);
     }
-
+*/
 
 
 
@@ -677,9 +682,9 @@ int main(int argc, char **argv) {
 //		combine(&sobel_x, &sobel_y, &new_image, &x_data);
 		combine_time = MPI_Wtime();
 
-        store_jpeg("y.jpg",&sobel_y);
-		store_jpeg("x.jpg",&sobel_x);	
-		store_jpeg("out.jpg",&new_image);
+        store_jpeg("y1.jpg",&sobel_y);
+		store_jpeg("x1.jpg",&sobel_x);	
+		store_jpeg("out1.jpg",&new_image);
 		store_time=MPI_Wtime();
 
  		printf("Convolve time: %lf\n",convolve_time-load_time);
