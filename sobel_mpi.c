@@ -21,27 +21,19 @@ static int sobel_y_filter[3][3]={{-1,-2,-1},{0,0,0},{1,2,+1}};
 
 /* Structure describing the image */
 struct image_t {
-	int x;
-	int y;
-	int depth;	/* bytes */
-	unsigned char *pixels;
+    int x;
+    int y;
+    int depth;    /* bytes */
+    unsigned char *pixels;
 };
 
 // Structure for convolve data
 struct convolve_data_t {
-	struct image_t *old;
-	struct image_t *new;
-	int (*filter)[3][3];
-	int ystart;
-	int yend;
-};
-
-// Structure for X11 window information
-struct XImage_data_t {
-    XImage *img;
-    Display *dpy;
-    int screen;
-    Window win;
+    struct image_t *old;
+    struct image_t *new;
+    int (*filter)[3][3];
+    int ystart;
+    int yend;
 };
 
 /* very inefficient convolve code */
@@ -102,137 +94,133 @@ static void *generic_convolve(void *argument) {
 
 static int load_jpeg(char *filename, struct image_t *image) {
 
-	FILE *fff;
-	struct jpeg_decompress_struct cinfo;
-	struct jpeg_error_mgr jerr;
-	JSAMPROW output_data;
-	unsigned int scanline_len;
-	int scanline_count=0;
+    FILE *fff;
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    JSAMPROW output_data;
+    unsigned int scanline_len;
+    int scanline_count=0;
 
-	fff=fopen(filename,"rb");
-	if (fff==NULL) {
-		fprintf(stderr, "Could not load %s: %s\n",
-			filename, strerror(errno));
-		return -1;
-	}
+    fff=fopen(filename,"rb");
+    if (fff==NULL) {
+        fprintf(stderr, "Could not load %s: %s\n",
+            filename, strerror(errno));
+        return -1;
+    }
 
-	/* set up jpeg error routines */
-	cinfo.err = jpeg_std_error(&jerr);
+    /* set up jpeg error routines */
+    cinfo.err = jpeg_std_error(&jerr);
 
-	/* Initialize cinfo */
-	jpeg_create_decompress(&cinfo);
+    /* Initialize cinfo */
+    jpeg_create_decompress(&cinfo);
 
-	/* Set input file */
-	jpeg_stdio_src(&cinfo, fff);
+    /* Set input file */
+    jpeg_stdio_src(&cinfo, fff);
 
-	/* read header */
-	jpeg_read_header(&cinfo, TRUE);
+    /* read header */
+    jpeg_read_header(&cinfo, TRUE);
 
-	/* Start decompressor */
-	jpeg_start_decompress(&cinfo);
+    /* Start decompressor */
+    jpeg_start_decompress(&cinfo);
 
-	printf("output_width=%d, output_height=%d, output_components=%d\n",
-		cinfo.output_width,
-		cinfo.output_height,
-		cinfo.output_components);
+    printf("output_width=%d, output_height=%d, output_components=%d\n",
+        cinfo.output_width,
+        cinfo.output_height,
+        cinfo.output_components);
 
-	image->x=cinfo.output_width;
-	image->y=cinfo.output_height;
-	image->depth=cinfo.output_components;
+    image->x=cinfo.output_width;
+    image->y=cinfo.output_height;
+    image->depth=cinfo.output_components;
 
-	scanline_len = cinfo.output_width * cinfo.output_components;
-	image->pixels=malloc(cinfo.output_width * cinfo.output_height * cinfo.output_components);
+    scanline_len = cinfo.output_width * cinfo.output_components;
+    image->pixels=malloc(cinfo.output_width * cinfo.output_height * cinfo.output_components);
 
-	while (scanline_count < cinfo.output_height) {
-		output_data = (image->pixels + (scanline_count * scanline_len));
-		jpeg_read_scanlines(&cinfo, &output_data, 1);
-		scanline_count++;
-	}
+    while (scanline_count < cinfo.output_height) {
+        output_data = (image->pixels + (scanline_count * scanline_len));
+        jpeg_read_scanlines(&cinfo, &output_data, 1);
+        scanline_count++;
+    }
 
-	/* Finish decompressing */
-	jpeg_finish_decompress(&cinfo);
+    /* Finish decompressing */
+    jpeg_finish_decompress(&cinfo);
 
-	jpeg_destroy_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
 
-	fclose(fff);
+    fclose(fff);
 
-	return 0;
+    return 0;
 }
 
 static int store_jpeg(char *filename, struct image_t *image) {
 
-	struct jpeg_compress_struct cinfo;
-	struct jpeg_error_mgr jerr;
-	int quality=90; /* % */
-	int i;
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    int quality=90; /* % */
+    int i;
 
-	FILE *fff;
+    FILE *fff;
 
-	JSAMPROW row_pointer[1];
-	int row_stride;
+    JSAMPROW row_pointer[1];
+    int row_stride;
 
-	/* setup error handler */
-	cinfo.err = jpeg_std_error(&jerr);
+    /* setup error handler */
+    cinfo.err = jpeg_std_error(&jerr);
 
-	/* initialize jpeg compression object */
-	jpeg_create_compress(&cinfo);
+    /* initialize jpeg compression object */
+    jpeg_create_compress(&cinfo);
 
-	/* Open file */
-	fff = fopen(filename, "wb");
-	if (fff==NULL) {
-		fprintf(stderr, "can't open %s: %s\n",
-			filename,strerror(errno));
-		return -1;
-	}
+    /* Open file */
+    fff = fopen(filename, "wb");
+    if (fff==NULL) {
+        fprintf(stderr, "can't open %s: %s\n",
+            filename,strerror(errno));
+        return -1;
+    }
 
-	jpeg_stdio_dest(&cinfo, fff);
+    jpeg_stdio_dest(&cinfo, fff);
 
-	/* Set compression parameters */
-	cinfo.image_width = image->x;
-	cinfo.image_height = image->y;
-	cinfo.input_components = image->depth;
-	cinfo.in_color_space = JCS_RGB;
-	jpeg_set_defaults(&cinfo);
-	jpeg_set_quality(&cinfo, quality, TRUE);
+    /* Set compression parameters */
+    cinfo.image_width = image->x;
+    cinfo.image_height = image->y;
+    cinfo.input_components = image->depth;
+    cinfo.in_color_space = JCS_RGB;
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE);
 
-	/* start compressing */
-	jpeg_start_compress(&cinfo, TRUE);
+    /* start compressing */
+    jpeg_start_compress(&cinfo, TRUE);
 
-	row_stride=image->x*image->depth;
+    row_stride=image->x*image->depth;
 
-	for(i=0;i<image->y;i++) {
-		row_pointer[0] = & image->pixels[i * row_stride];
-		jpeg_write_scanlines(&cinfo, row_pointer, 1);
-	}
+    for(i=0;i<image->y;i++) {
+        row_pointer[0] = & image->pixels[i * row_stride];
+        jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
 
-	/* finish compressing */
-	jpeg_finish_compress(&cinfo);
+    /* finish compressing */
+    jpeg_finish_compress(&cinfo);
 
-	/* close file */
-	fclose(fff);
+    /* close file */
+    fclose(fff);
 
-	/* clean up */
-	jpeg_destroy_compress(&cinfo);
+    /* clean up */
+    jpeg_destroy_compress(&cinfo);
 
-	return 0;
+    return 0;
 }
 
-static int combine(struct image_t *s_x,
-      struct image_t *s_y,
-      struct image_t *new,
-      int start, int stop
-      ) {
+static int combine(struct image_t *s_x, struct image_t *s_y, 
+                   struct image_t *new, int start, int stop) {
   int i;
   int out;
-  for(i = (start* s_x->depth * s_x->x); i < (s_x->depth * s_x->x * stop); i++) {
-
-    out=sqrt(
-      (s_x->pixels[i]*s_x->pixels[i])+
-      (s_y->pixels[i]*s_y->pixels[i])
-      );
+  for(i=(start*s_x->depth*s_x->x); i<(s_x->depth*s_x->x*stop); i++) {
+    out=sqrt((s_x->pixels[i]*s_x->pixels[i])+
+            (s_y->pixels[i]*s_y->pixels[i]));
+            
     if (out>255) out=255;
     if (out<0) out=0;
-    //offset for mpi gather
+
+    // Offset for mpi gather
     new->pixels[i-(start*s_x->depth*s_x->x)]=out;
   }
 
@@ -240,17 +228,17 @@ static int combine(struct image_t *s_x,
 }
 
 int main(int argc, char **argv) {
-
-	struct image_t image, sobel_x, sobel_y, new_image, tail, another;
-	struct convolve_data_t sobel_data;
-	double start_time=0, load_time=0, store_time=0, convolve_time=0, combine_time=0;
-	int result, rank, numtasks,y,x,d;
-	int image_info[3];		//x,y,depth
-	int i, j;
+    struct image_t image, sobel_x, sobel_y, new_image, tail, another;
+    struct convolve_data_t sobel_data;
+    double start_time=0, load_time=0, store_time=0, convolve_time=0, combine_time=0;
+    int result, rank, numtasks,y,x,d;
+    int image_info[3];
+    int i, j;
+    int color;
     int tailstart, tailsize;
     int ystart, yend;
-	long val = 0;
-	char *data;
+    long val = 0;
+    char *data;
     Display *display;
     int screen_num;
     Window root, win;
@@ -260,18 +248,18 @@ int main(int argc, char **argv) {
     int *counts;
     int *displacements;
 
-	/* Check command line usage */
-	if (argc<2) {
-		fprintf(stderr,"Usage: %s image_file\n",argv[0]);
-		return -1;
-	}
+    /* Check command line usage */
+    if (argc<2) {
+        fprintf(stderr,"Usage: %s image_file\n",argv[0]);
+        return -1;
+    }
 
-	/* Initialize MPI */
-	result = MPI_Init(&argc,&argv);
-	if (result != MPI_SUCCESS) {
-		printf ("Error starting MPI program!.\n");
-		MPI_Abort(MPI_COMM_WORLD, result);
-	}
+    /* Initialize MPI */
+    result = MPI_Init(&argc,&argv);
+    if (result != MPI_SUCCESS) {
+        printf ("Error starting MPI program!.\n");
+        MPI_Abort(MPI_COMM_WORLD, result);
+    }
 
 
     /* find out how big the SPMD world is */
@@ -280,47 +268,50 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 
     // Initial setup on base node
-	if (rank == 0) {
-		printf("Size: %d\nRank: %d\n",numtasks, rank);
+    if (rank == 0) {
+        printf("Size: %d\nRank: %d\n",numtasks, rank);
 
-		start_time=MPI_Wtime();
-		load_jpeg(argv[1],&image);		//load the image
-		load_time=MPI_Wtime();				
-		printf("Load time: %lf\n",load_time-start_time);
+        start_time=MPI_Wtime();
+        load_jpeg(argv[1],&image);        //load the image
+        load_time=MPI_Wtime();                
+        printf("Load time: %lf\n",load_time-start_time);
 
-		image_info[0] = image.x;			//horizontal pixel #
-		image_info[1] = image.y;			//vertical pixel #
-		image_info[2] = image.depth;	//image depth
+        image_info[0] = image.x;            //horizontal pixel #
+        image_info[1] = image.y;            //vertical pixel #
+        image_info[2] = image.depth;    //image depth
 
-		// Initial X11 window setup
-		display = XOpenDisplay(NULL);
-		screen_num = DefaultScreen(display);
-		root = RootWindow(display,screen_num);
-		visual = DefaultVisual(display,screen_num);
+        // Initial X11 window setup
+        display = XOpenDisplay(NULL);
+        screen_num = DefaultScreen(display);
+        root = RootWindow(display,screen_num);
+        visual = DefaultVisual(display,screen_num);
 
-		// Create X11 Image using input image parameters
-		// Although we load images with 24bpp, X11 only has 8, 16, and 32bpp capabilities so we use 32bpp
-		data = (char *)malloc(image.x*image.y*4);
-		img = XCreateImage(display,visual,DefaultDepth(display,screen_num),ZPixmap,0,data,image.x,image.y,32,0);
+        // Create X11 Image using input image parameters
+        // Although we load images with 24bpp, X11 only has 8, 16, and 32bpp 
+        // capabilities so we use 32bpp
+        data = (char *)malloc(image.x*image.y*4);
+        img = XCreateImage(display,visual,DefaultDepth(display,screen_num),
+                           ZPixmap,0,data,image.x,image.y,32,0);
 
-		// Setup window for displaying
-		win = XCreateSimpleWindow(display,root,50,50,image.x,image.y,1,0,0);
-		XMapWindow(display,win);
+        // Setup window for displaying
+        win = XCreateSimpleWindow(display,root,50,50,image.x,image.y,1,0,0);
+        XMapWindow(display,win);
         XSelectInput(display, win, ExposureMask | KeyPressMask);
         XStoreName(display, win, "Base Image");
 
-		// Display original image to X11 Screen
-		for(y = 0; y < image.y; y++) {
-			for(x = 0; x < image.x; x++) {
-				val = 0;
-				for(d = 0; d<3; d++) {
-					val |= (image.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
-				}
-				XPutPixel(img, x, y, (long)val);
-			}
-		}
-		XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,image.x,image.y);
-	}
+        // Display original image to X11 Screen
+        for(y = 0; y < image.y; y++) {
+            for(x = 0; x < image.x; x++) {
+                val = 0;
+                for(d = 0; d<3; d++) {
+                    color = (y*image.x*image.depth)+x*image.depth+d;
+                    val |= (image.pixels[color]<<8*(2-d));
+                }
+                XPutPixel(img, x, y, (long)val);
+            }
+        }
+        XPutImage(display,win,DefaultGC(display,screen_num),img,0,0,0,0,image.x,image.y);
+    }
 
     // Allocate space for rank counts (needed for MPI_Gatherv)
     counts=calloc(numtasks, sizeof(int));
@@ -332,46 +323,46 @@ int main(int argc, char **argv) {
     displacements=calloc(numtasks, sizeof(int));
 
     // Make all pcoesses wait
-	MPI_Barrier(MPI_COMM_WORLD);		
+    MPI_Barrier(MPI_COMM_WORLD);        
 
     // Broadcast paremeters
-	result = MPI_Bcast(image_info, 3,MPI_INT, 0, MPI_COMM_WORLD);
+    result = MPI_Bcast(image_info, 3,MPI_INT, 0, MPI_COMM_WORLD);
     if (result != MPI_SUCCESS) {
         printf("Error broadcasting image info.\n");
         MPI_Abort(MPI_COMM_WORLD, result);
     }
 
     // Set up image for remaining ranks
-	if (rank != 0) {
-		image.x = image_info[0];			//set image width
-		image.y = image_info[1];			//set image heught
-		image.depth = image_info[2];	//set image depth
-		image.pixels=calloc(image.x*image.y*image.depth,sizeof(char));	//allocate memory
-	}
+    if (rank != 0) {
+        image.x = image_info[0];            //set image width
+        image.y = image_info[1];            //set image heught
+        image.depth = image_info[2];    //set image depth
+        image.pixels=calloc(image.x*image.y*image.depth,sizeof(char));    //allocate memory
+    }
 
-	// Allocate space for final image
-	new_image.x = image.x;
-	new_image.y = image.y;
-	new_image.depth = image.depth;
-	new_image.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
+    // Allocate space for final image
+    new_image.x = image.x;
+    new_image.y = image.y;
+    new_image.depth = image.depth;
+    new_image.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
 
-	// Allocate space for Sobel X image
-	sobel_x.x = image.x;
-	sobel_x.y = image.y;
-	sobel_x.depth = image.depth;
-	sobel_x.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
+    // Allocate space for Sobel X image
+    sobel_x.x = image.x;
+    sobel_x.y = image.y;
+    sobel_x.depth = image.depth;
+    sobel_x.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
 
-	// Allocate space for Sobel Y image
-	sobel_y.x = image.x;
-	sobel_y.y = image.y;
-	sobel_y.depth = image.depth;
-	sobel_y.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
+    // Allocate space for Sobel Y image
+    sobel_y.x = image.x;
+    sobel_y.y = image.y;
+    sobel_y.depth = image.depth;
+    sobel_y.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
 
-	//allocate space for intermediate image
-	another.x=image.x;
-	another.y=image.y;
-	another.depth=image.depth;
-	another.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
+    //allocate space for intermediate image
+    another.x=image.x;
+    another.y=image.y;
+    another.depth=image.depth;
+    another.pixels=calloc(image.x*image.y*image.depth,sizeof(char));
 
     // Allocate space for tail image
     if (rank == 0) {
@@ -380,9 +371,9 @@ int main(int argc, char **argv) {
         tail.depth = image.depth;
         tail.pixels = calloc(image.x*image.y*image.depth,sizeof(char));
     }
-		
-	// Broadcast the input pixels for sobel convoluctions
-	result = MPI_Bcast(image.pixels, image.x*image.y*image.depth, MPI_CHAR, 0, MPI_COMM_WORLD);
+        
+    // Broadcast the input pixels for sobel convoluctions
+    result = MPI_Bcast(image.pixels, image.x*image.y*image.depth, MPI_CHAR, 0, MPI_COMM_WORLD);
     if (result != MPI_SUCCESS) {
         printf("Error broadcasting image.\n");
         MPI_Abort(MPI_COMM_WORLD, result);
@@ -425,7 +416,8 @@ int main(int argc, char **argv) {
                 for(x = 0; x < image.x; x++) {
                     val = 0;
                     for(d = 0; d<3; d++) {
-                        val |= (sobel_x.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                        color = (y*image.x*image.depth)+x*image.depth+d;
+                        val |= (sobel_x.pixels[color]<<8*(2-d));
                     }
                     XPutPixel(img, x, y, (long)val);
                 }
@@ -464,7 +456,8 @@ int main(int argc, char **argv) {
                 val = 0;
                 for(d = 0; d<3; d++) {
                     // Create RGB value for 
-                    val |= (sobel_x.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                    color = (y*image.x*image.depth)+x*image.depth+d;
+                    val |= (sobel_x.pixels[color]<<8*(2-d));
                 }
                 XPutPixel(img, x, y, (long)val);
             }
@@ -512,7 +505,8 @@ int main(int argc, char **argv) {
                     val = 0;
                     for(d = 0; d<3; d++) {
                         // Create RGB value for 
-                        val |= (sobel_y.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                        color = (y*image.x*image.depth)+x*image.depth+d;
+                        val |= (sobel_y.pixels[color]<<8*(2-d));
                     }
                     XPutPixel(img, x, y, (long)val);
                 }
@@ -551,7 +545,8 @@ int main(int argc, char **argv) {
                 val = 0;
                 for(d = 0; d<3; d++) {
                     // Create RGB value for 
-                    val |= (sobel_y.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                    color = (y*image.x*image.depth)+x*image.depth+d;
+                    val |= (sobel_y.pixels[color]<<8*(2-d));
                 }
                 XPutPixel(img, x, y, (long)val);
             }
@@ -563,26 +558,26 @@ int main(int argc, char **argv) {
 
     // Get time it took to do convolve
     if (rank == 0) {
-		convolve_time = MPI_Wtime();
+        convolve_time = MPI_Wtime();
     }
-	
+    
     // Make all pcoesses wait
-	MPI_Barrier(MPI_COMM_WORLD);		
+    MPI_Barrier(MPI_COMM_WORLD);        
 
-	// Broadcast the new Sobel X & Sobel Y images to all ranks
-	MPI_Bcast(sobel_x.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
-	MPI_Bcast(sobel_y.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
+    // Broadcast the new Sobel X & Sobel Y images to all ranks
+    MPI_Bcast(sobel_x.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
+    MPI_Bcast(sobel_y.pixels, image.x*image.y*image.depth,MPI_CHAR, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
         XStoreName(display, win, "Combine");
     }
 
-   	ystart = image.y / numtasks * rank;
-   	yend = image.y / numtasks * rank + 1;
+       ystart = image.y / numtasks * rank;
+       yend = image.y / numtasks * rank + 1;
 
     // Loop through the amount of even lines available
     for(i = 0; i < image.y / numtasks; i++) {
-		combine(&sobel_x,&sobel_y,&another,ystart,yend);
+        combine(&sobel_x,&sobel_y,&another,ystart,yend);
 
         // Adjust displacements for putting lines into sobel buffer
         for(j = 0; j < numtasks; j++){
@@ -607,7 +602,8 @@ int main(int argc, char **argv) {
                 for(x = 0; x < image.x; x++) {
                     val = 0;
                     for(d = 0; d<3; d++) {
-                        val |= (new_image.pixels[(y*image.x*image.depth)+x*image.depth+d]<<8*(2-d));
+                        color = (y*image.x*image.depth)+x*image.depth+d;
+                        val |= (new_image.pixels[color]<<8*(2-d));
                     }
                     XPutPixel(img, x, y, (long)val);
                 }
@@ -649,19 +645,19 @@ int main(int argc, char **argv) {
         }
     }
 
-	if(rank == 0) {
+    if(rank == 0) {
         // Read how long the combine took
-		combine_time = MPI_Wtime();
+        combine_time = MPI_Wtime();
 
-		//store_jpeg("x.jpg",&sobel_x);	
+        //store_jpeg("x.jpg",&sobel_x);    
         //store_jpeg("y.jpg",&sobel_y);
-		store_jpeg("out.jpg",&new_image);
-		store_time=MPI_Wtime();
+        store_jpeg("out.jpg",&new_image);
+        store_time=MPI_Wtime();
 
- 		printf("Convolve time: %lf\n",convolve_time-load_time);
- 		printf("Combine time: %lf\n",combine_time-convolve_time);
- 		printf("Store time: %lf\n",store_time-combine_time);
-		printf("Total time = %lf\n",store_time-start_time);
+        printf("Convolve time: %lf\n",convolve_time-load_time);
+        printf("Combine time: %lf\n",combine_time-convolve_time);
+        printf("Store time: %lf\n",store_time-combine_time);
+        printf("Total time = %lf\n",store_time-start_time);
         
         // Display image until key pressed
         while(1) {
@@ -674,10 +670,9 @@ int main(int argc, char **argv) {
         // Clean up X windows
         XDestroyWindow(display, win);
         XCloseDisplay(display);
-	}
+    }
 
-	MPI_Finalize();
+    MPI_Finalize();
 
-
-	return 0;
+    return 0;
 }
