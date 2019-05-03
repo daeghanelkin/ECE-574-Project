@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
 
         // Adjust displacements for putting lines into sobel buffer
         for(j = 0; j < numtasks; j++){
-            displacements[j]=(j*image.y/numtasks*image.x*image.depth)+(i*image.x*image.depth);
+            displacements[j]=(j*(image.y/numtasks)*image.x*image.depth)+(i*image.x*image.depth);
         }
 
         // Gather a line at a time from each rank
@@ -421,7 +421,7 @@ int main(int argc, char **argv) {
 
         // Update image
         if (rank == 0) {
-            for(y = sobel_data.ystart; y < image.y; y+=image.y/numtasks) {
+            for(y = sobel_data.ystart; y < image.y/numtasks*numtasks; y+=image.y/numtasks) {
                 for(x = 0; x < image.x; x++) {
                     val = 0;
                     for(d = 0; d<3; d++) {
@@ -491,7 +491,7 @@ int main(int argc, char **argv) {
 
         // Adjust displacements for putting lines into sobel buffer
         for(j = 0; j < numtasks; j++){
-            displacements[j]=(j*image.y/numtasks*image.x*image.depth)+(i*image.x*image.depth);
+            displacements[j]=(j*(image.y/numtasks)*image.x*image.depth)+(i*image.x*image.depth);
         }
 
         // Gather a line at a time from each rank
@@ -507,7 +507,7 @@ int main(int argc, char **argv) {
 
         // Update image
         if (rank == 0) {
-            for(y = sobel_data.ystart; y < image.y; y+=image.y/numtasks) {
+            for(y = sobel_data.ystart; y < image.y/numtasks*numtasks; y+=image.y/numtasks) {
                 for(x = 0; x < image.x; x++) {
                     val = 0;
                     for(d = 0; d<3; d++) {
@@ -586,7 +586,7 @@ int main(int argc, char **argv) {
 
         // Adjust displacements for putting lines into sobel buffer
         for(j = 0; j < numtasks; j++){
-            displacements[j]=(j*image.y/numtasks*image.x*image.depth)+(i*image.x*image.depth);
+            displacements[j]=(j*(image.y/numtasks)*image.x*image.depth)+(i*image.x*image.depth);
         }
 
         // Gather a line at a time from each rank
@@ -603,7 +603,7 @@ int main(int argc, char **argv) {
 
         // Update image
         if (rank == 0) {
-            for(y = ystart; y < image.y; y+=image.y/numtasks) {
+            for(y = ystart; y < image.y/numtasks*numtasks; y+=image.y/numtasks) {
                 for(x = 0; x < image.x; x++) {
                     val = 0;
                     for(d = 0; d<3; d++) {
