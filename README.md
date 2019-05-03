@@ -29,3 +29,18 @@ Running `make clean` will clean the directory of anything not required for compi
 ## Running
 
 Running the executables can be done two ways.
+
+For `sobel_before` you can simply run `./sobel_before <input_image.jpg>`.
+
+For `sobel_mpi` you need to run `mpiexec -n <# of Cores> ./sobel_mpi <input_image.jpg>`.
+
+## Future Work
+
+This project isn't anywhere near perfect. Some future improvements might be with
+performance, image sizing, and information. This run very slow, even with small
+images so improvements to how we gather or divide up the image per core might
+improve that. Currently this has no support for images larger than your display.
+If an image is larger than your resolution you'll only see part of it. There's
+probably some way to scale but that's for another time. It would also be cool to
+show some information about work load/distribution across the pi cluster.
+
